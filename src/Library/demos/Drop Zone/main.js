@@ -1,34 +1,44 @@
 import Gtk from "gi://Gtk";
 import Gio from "gi://Gio";
 import Adw from "gi://Adw";
+
 import Gdk from "gi://Gdk";
 import GObject from "gi://GObject";
-
+import Soup from "gi://Soup";
 const bin = workbench.builder.get_object("bin");
 
-// Universal drop target for any String data
-const string_drop_target = Gtk.DropTarget.new(
-  GObject.TYPE_STRING,
-  Gdk.DragAction.COPY,
-);
+const builder = Gdk.ContentFormatsBuilder.new();
+builder.add_mime_type("text/uri-list");
+const formats = builder.to_formats();
 
-bin.add_controller(string_drop_target);
-
-string_drop_target.connect("drop", (self, value, x, y) => {
-  bin.child = createTextPreview(value);
-  bin.remove_css_class("overlay-drag-area");
+const uri_drop_target = new Gtk.DropTargetAsync({
+  actions: Gdk.DragAction.COPY,
+  formats: formats,
 });
 
-// Drop Target for Files
-const file_drop_target = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY);
-bin.add_controller(file_drop_target);
-file_drop_target.connect("drop", (self, value, x, y) => {
-  try {
-    bin.child = onDrop(value);
-  } catch (err) {
-    logError(err, "Unable to load preview");
-  }
-  bin.remove_css_class("overlay-drag-area");
+bin.add_controller(uri_drop_target);
+
+uri_drop_target.connect("drop", (self, drop) => {
+  drop.read_async(
+    ["text/uri-list"],
+    Gio.PRIORITY_DEFAULT,
+    null,
+    (drop, res) => {
+      const uris = drop.read_value_finish(res).deep_unpack();
+      const firstUri = uris[0];
+      if (firstUri.startsWith("file://")) {
+        const file = Gio.File.new_for_uri(firstUri);
+        bin.child = onDrop(file);
+      } else if (
+        firstUri.startsWith("http://") ||
+        firstUri.startsWith("https://")
+      ) {
+        bin.child = createImagePreviewFromUrl(firstUri);
+      }
+      bin.remove_css_class("overlay-drag-area");
+    },
+  );
+  return Gdk.DragAction.COPY;
 });
 
 function onDrop(value) {
@@ -44,6 +54,35 @@ function onDrop(value) {
   } else {
     return createFilePreview(value);
   }
+}
+
+function createImagePreviewFromUrl(url) {
+  const widget = createBoxWidget();
+  const session = new Soup.Session();
+  const message = Soup.Message.new("GET", url);
+
+  session.queue_message(message, (session, message) => {
+    if (message.status_code !== 200) {
+      logError(
+        new Error(`Unable to download image from URL: ${url}`),
+        "Image download error",
+      );
+      return;
+    }
+
+    const file = Gio.File.new_tmp("imageXXXXXX")[0];
+    Gio.file_set_contents(
+      file.get_path(),
+      message.response_body.flatten().get_as_bytes(),
+    );
+
+    const picture = Gtk.Picture.new_for_file(file);
+    picture.can_shrink = true;
+    picture.content_fit = Gtk.ContentFit.SCALE_DOWN;
+    widget.append(picture);
+  });
+
+  return widget;
 }
 
 function createImagePreview(value) {
@@ -97,21 +136,3 @@ function createBoxWidget() {
     margin_end: 12,
   });
 }
-
-// Drop Hover Effect
-
-file_drop_target.connect("enter", () => {
-  bin.add_css_class("overlay-drag-area");
-});
-
-file_drop_target.connect("leave", () => {
-  bin.remove_css_class("overlay-drag-area");
-});
-
-string_drop_target.connect("enter", () => {
-  bin.add_css_class("overlay-drag-area");
-});
-
-string_drop_target.connect("leave", () => {
-  bin.remove_css_class("overlay-drag-area");
-});
