@@ -16,7 +16,7 @@ content_formats_builder.add_mime_type("image/png");
 content_formats_builder.add_mime_type("image/jpeg");
 content_formats_builder.add_mime_type("image/gif");
 content_formats_builder.add_mime_type("image/svg+xml");
-const formats = builder.to_formats();
+const formats = content_formats_builder.to_formats();
 
 const uri_drop_target = new Gtk.DropTargetAsync({
   actions: Gdk.DragAction.COPY,
@@ -61,35 +61,6 @@ function onDrop(value) {
   } else {
     return createFilePreview(value);
   }
-}
-
-function createImagePreviewFromUrl(url) {
-  const widget = createBoxWidget();
-  const session = new Soup.Session();
-  const message = Soup.Message.new("GET", url);
-
-  session.queue_message(message, (session, message) => {
-    if (message.status_code !== 200) {
-      logError(
-        new Error(`Unable to download image from URL: ${url}`),
-        "Image download error",
-      );
-      return;
-    }
-
-    const file = Gio.File.new_tmp("imageXXXXXX")[0];
-    Gio.file_set_contents(
-      file.get_path(),
-      message.response_body.flatten().get_as_bytes(),
-    );
-
-    const picture = Gtk.Picture.new_for_file(file);
-    picture.can_shrink = true;
-    picture.content_fit = Gtk.ContentFit.SCALE_DOWN;
-    widget.append(picture);
-  });
-
-  return widget;
 }
 
 function createImagePreview(value) {
