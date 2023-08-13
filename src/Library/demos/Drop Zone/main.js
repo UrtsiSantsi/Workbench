@@ -1,14 +1,21 @@
 import Gtk from "gi://Gtk";
 import Gio from "gi://Gio";
 import Adw from "gi://Adw";
-
 import Gdk from "gi://Gdk";
 import GObject from "gi://GObject";
-import Soup from "gi://Soup";
 const bin = workbench.builder.get_object("bin");
 
-const builder = Gdk.ContentFormatsBuilder.new();
-builder.add_mime_type("text/uri-list");
+// Create a new GdkContentFormatsBuilder object
+const content_formats_builder = Gdk.ContentFormatsBuilder.new();
+
+// Append GType if needed
+content_formats_builder.add_gtype(GObject.TYPE_STRING);
+
+// Append supported image MIME types
+content_formats_builder.add_mime_type("image/png");
+content_formats_builder.add_mime_type("image/jpeg");
+content_formats_builder.add_mime_type("image/gif");
+content_formats_builder.add_mime_type("image/svg+xml");
 const formats = builder.to_formats();
 
 const uri_drop_target = new Gtk.DropTargetAsync({
